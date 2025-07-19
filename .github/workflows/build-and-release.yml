@@ -1,0 +1,259 @@
+name: Build and Release SHIPS2-Go
+
+on:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  GO_VERSION: '1.22'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+    
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+    
+    - name: Download dependencies
+      run: go mod download
+    
+    - name: Verify dependencies
+      run: go mod verify
+    
+    - name: Run vet
+      run: go vet ./...
+    
+    - name: Run tests
+      run: go test -race -coverprofile=coverage.out ./...
+    
+    - name: Check formatting
+      run: |
+        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+          echo "Code is not formatted properly:"
+          gofmt -s -l .
+          exit 1
+        fi
+
+  build:
+    name: Build Binaries
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            suffix: ''
+          - goos: linux
+            goarch: arm64
+            suffix: ''
+          - goos: windows
+            goarch: amd64
+            suffix: '.exe'
+          - goos: windows
+            goarch: arm64
+            suffix: '.exe'
+          - goos: darwin
+            goarch: amd64
+            suffix: ''
+          - goos: darwin
+            goarch: arm64
+            suffix: ''
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+    
+    - name: Get version
+      id: version
+      run: |
+        if [[ $GITHUB_REF == refs/tags/* ]]; then
+          VERSION=${GITHUB_REF#refs/tags/}
+        else
+          VERSION=dev-$(git rev-parse --short HEAD)
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Building version: $VERSION"
+    
+    - name: Build server
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        CGO_ENABLED: 0
+      run: |
+        go build -trimpath -ldflags "-s -w -X 'main.version=${{ steps.version.outputs.version }}'" \
+          -o dist/ships-server-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }} \
+          ./cmd/server
+    
+    - name: Build client
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        CGO_ENABLED: 0
+      run: |
+        go build -trimpath -ldflags "-s -w -X 'main.version=${{ steps.version.outputs.version }}'" \
+          -o dist/shipsc-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }} \
+          ./cmd/client
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+        path: dist/
+        retention-days: 30
+
+  build-windows-installer:
+    name: Build Windows Installer
+    runs-on: windows-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download Windows binaries
+      uses: actions/download-artifact@v3
+      with:
+        name: binaries-windows-amd64
+        path: dist/
+    
+    - name: Install NSIS
+      run: |
+        Invoke-WebRequest -Uri "https://nsis.sourceforge.io/mediawiki/images/4/4a/nsis-3.08-setup.exe" -OutFile "nsis-setup.exe"
+        Start-Process -FilePath "nsis-setup.exe" -ArgumentList "/S" -Wait
+    
+    - name: Create installer
+      run: |
+        & "C:\Program Files (x86)\NSIS\makensis.exe" /DVERSION=${{ github.ref_name }} installer/windows/ships2-go-installer.nsi
+    
+    - name: Upload installer
+      uses: actions/upload-artifact@v3
+      with:
+        name: windows-installer
+        path: installer/windows/SHIPS2-Go-*.exe
+
+  build-linux-packages:
+    name: Build Linux Packages
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download Linux binaries
+      uses: actions/download-artifact@v3
+      with:
+        name: binaries-linux-amd64
+        path: dist/
+    
+    - name: Install packaging tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential debhelper devscripts rpm
+    
+    - name: Build DEB package
+      run: |
+        chmod +x scripts/build-deb.sh
+        ./scripts/build-deb.sh ${{ github.ref_name }}
+    
+    - name: Build RPM package
+      run: |
+        chmod +x scripts/build-rpm.sh
+        ./scripts/build-rpm.sh ${{ github.ref_name }}
+    
+    - name: Upload packages
+      uses: actions/upload-artifact@v3
+      with:
+        name: linux-packages
+        path: |
+          *.deb
+          *.rpm
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build, build-windows-installer, build-linux-packages]
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+    
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets
+        
+        # Copy binaries
+        find . -name "ships-server-*" -exec cp {} release-assets/ \;
+        find . -name "shipsc-*" -exec cp {} release-assets/ \;
+        
+        # Copy installers
+        find . -name "*.exe" -path "*/windows-installer/*" -exec cp {} release-assets/ \;
+        find . -name "*.deb" -exec cp {} release-assets/ \;
+        find . -name "*.rpm" -exec cp {} release-assets/ \;
+        
+        # Create checksums
+        cd release-assets
+        sha256sum * > SHA256SUMS
+        cd ..
+        
+        # Create source archive
+        git archive --format=tar.gz --prefix=ships2-go-${{ github.ref_name }}/ ${{ github.ref_name }} > release-assets/ships2-go-${{ github.ref_name }}-source.tar.gz
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: SHIPS2-Go ${{ github.ref_name }}
+        body_path: RELEASE_NOTES_${{ github.ref_name }}.md
+        draft: false
+        prerelease: false
+        files: release-assets/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+    
+    - name: Run Gosec Security Scanner
+      uses: securecodewarrior/github-action-gosec@master
+      with:
+        args: '-fmt sarif -out gosec.sarif ./...'
+    
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: gosec.sarif
