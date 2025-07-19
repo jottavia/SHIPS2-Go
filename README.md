@@ -41,6 +41,7 @@ curl http://127.0.0.1:8080/healthz
    - Action → Import Task...
    - Select `client_task.xml`
    - Modify server URL if needed
+   - The task runs `shipsc.exe rotate` daily under the SYSTEM account
 
 4. Test the setup:
    ```powershell

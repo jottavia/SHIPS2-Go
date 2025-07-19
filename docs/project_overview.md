@@ -12,7 +12,7 @@
 curl -fsSL https://raw.githubusercontent.com/your‑org/ships-go/main/deploy/deploy_ships_server.sh | bash -s -- --with‑wazuh --auth admin:SecurePass123
 ```
 *Result: systemd service running, SSH wrapper in place, rsyslog/Wazuh forwarding configured, HTTP Basic Auth enabled.*  
-Now copy **`shipsc.exe`** to each Windows PC and import **`docs/client_task.xml`**. Done.
+Now copy **`shipsc.exe`** to each Windows PC and import **`docs/client_task.xml`**—a daily task that runs `shipsc.exe rotate`. Done.
 
 ---
 
@@ -176,7 +176,7 @@ Register-ScheduledTask -Xml (Get-Content "client_task.xml" | Out-String) -TaskNa
 ### Manual Setup
 
 1. Copy `shipsc.exe` to `C:\Program Files\Ships\`
-2. Import `docs/client_task.xml` via Task Scheduler
+2. Import `docs/client_task.xml` via Task Scheduler (it executes `shipsc.exe rotate` daily)
 3. Verify in Event Viewer → Applications and Services Logs → Ships
 4. Test with: `shipsc.exe fetch %COMPUTERNAME%`
 
