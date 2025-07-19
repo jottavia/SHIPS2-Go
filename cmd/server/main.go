@@ -49,10 +49,7 @@ func basicAuthMiddleware(username, password string) gin.HandlerFunc {
 
 // loggingMiddleware logs all requests
 func loggingMiddleware() gin.HandlerFunc {
-    return gin.LoggerWithConfig(gin.LoggerConfig{
-        Formatter: gin.DefaultLogFormatter,
-        Output:    os.Stdout,
-    })
+    return gin.LoggerWithWriter(os.Stdout)
 }
 
 func main() {
