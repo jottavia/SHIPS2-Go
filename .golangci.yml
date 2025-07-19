@@ -1,0 +1,152 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - containedctx
+    - contextcheck
+    - cyclop
+    - dupl
+    - durationcheck
+    - errcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - execinquery
+    - exhaustive
+    - exportloopref
+    - forbidigo
+    - forcetypeassert
+    - funlen
+    - gci
+    - gocheckcompilerdirectives
+    - gochecknoglobals
+    - gochecknoinits
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - gofmt
+    - gofumpt
+    - goheader
+    - goimports
+    - gomnd
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - gosimple
+    - govet
+    - grouper
+    - importas
+    - ineffassign
+    - interfacebloat
+    - ireturn
+    - lll
+    - loggercheck
+    - maintidx
+    - makezero
+    - misspell
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnil
+    - noctx
+    - nolintlint
+    - nonamedreturns
+    - nosprintfhostport
+    - predeclared
+    - promlinter
+    - reassign
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - stylecheck
+    - tenv
+    - testableexamples
+    - thelper
+    - tparallel
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - usestdlibvars
+    - varnamelen
+    - wastedassign
+    - whitespace
+    - wrapcheck
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+  
+  golint:
+    min-confidence: 0
+  
+  govet:
+    check-shadowing: true
+  
+  lll:
+    line-length: 120
+  
+  maligned:
+    suggest-new: true
+  
+  misspell:
+    locale: US
+  
+  funlen:
+    lines: 100
+    statements: 50
+  
+  gosec:
+    excludes:
+      - G107 # Potential HTTP request made with variable url
+      - G204 # Subprocess launched with variable
+  
+  varnamelen:
+    min-name-length: 2
+    ignore-names:
+      - id
+      - db
+      - tx
+      - st
+      - r
+      - w
+      - c
+      - i
+      - j
+      - k
+      - v
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - funlen
+        - gocognit
+    
+    - path: cmd/
+      linters:
+        - gochecknoglobals
+    
+    - text: "weak cryptographic primitive"
+      linters:
+        - gosec
+    
+    - text: "should not use dot imports"
+      linters:
+        - revive
+  
+  max-issues-per-linter: 0
+  max-same-issues: 0
