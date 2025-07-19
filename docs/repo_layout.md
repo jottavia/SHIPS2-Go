@@ -34,7 +34,7 @@ ships-go/
 ├─ docs/                   # Human‑readable docs & templates
 │   ├─ project_overview_latest.md   # Canonical spec (this repo's contract)
 │   ├─ wazuh_integration_latest.md  # SIEM integration how‑to
-│   ├─ client_task.xml              # Scheduled Task for Windows 11
+│   ├─ client_task.xml              # Task Scheduler XML (runs `shipsc.exe rotate` daily)
 │   └─ repo_layout.md               # **this file**
 │
 └─ tests/ (optional)       # <future> Go test fixtures & integration harness
