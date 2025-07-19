@@ -1,10 +1,4 @@
-# go.sum — checksums for Go module dependencies
-#
-# NOTE: These sums were generated with `go mod download` on Go 1.22.
-# If you update dependencies, re‑run `go mod tidy && go mod verify` to refresh.
-
 github.com/gin-gonic/gin v1.12.0 h1:wuRj/iI+un7sBRD1VsrTMoqbPTZzyJWgRoewC2A9tOc=
 github.com/gin-gonic/gin v1.12.0/go.mod h1:Q4+/7NNbHegVYLT+LjTr30OTtQXwXw+apakOsynpSXQ=
-
 modernc.org/sqlite v1.25.0 h1:AMsKyCh+3y5A0fLOma+7Jms0cH+MQbND1E+4+a69nrA=
 modernc.org/sqlite v1.25.0/go.mod h1:+QCd8XWbp/7FePXVFcCITvBaq7199BO5o5DGs/EfbvY=
