@@ -21,8 +21,11 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
     
-    - name: Tidy dependencies
-      run: go mod tidy
+    - name: Remove and regenerate go.sum
+      run: |
+        rm -f go.sum
+        go mod download
+        go mod tidy
     
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v3
@@ -45,8 +48,11 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
     
-    - name: Tidy dependencies
-      run: go mod tidy
+    - name: Remove and regenerate go.sum
+      run: |
+        rm -f go.sum
+        go mod download
+        go mod tidy
     
     - name: Cache dependencies
       uses: actions/cache@v3
@@ -55,9 +61,6 @@ jobs:
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
         restore-keys: |
           ${{ runner.os }}-go-
-    
-    - name: Download dependencies
-      run: go mod download
     
     - name: Verify dependencies
       run: go mod verify
@@ -87,8 +90,11 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
     
-    - name: Tidy dependencies
-      run: go mod tidy
+    - name: Remove and regenerate go.sum
+      run: |
+        rm -f go.sum
+        go mod download
+        go mod tidy
     
     - name: Build server
       run: go build -v ./cmd/server
