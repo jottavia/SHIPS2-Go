@@ -6,10 +6,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // justify: sqlite driver
+)
+
+const (
+	actorUnknown = "unknown"
 )
 
 // Store wraps a SQLite database that holds machine passwords, BitLocker keys and an audit log.
@@ -17,14 +22,14 @@ type Store struct {
 	db *sql.DB
 }
 
-// PasswordInfo holds password data with metadata
+// PasswordInfo holds password data with metadata.
 type PasswordInfo struct {
 	Password  string    `json:"password"`
 	RotatedAt time.Time `json:"rotated_at"`
 	Actor     string    `json:"actor"`
 }
 
-// BitLockerKeyInfo holds BitLocker key data with metadata
+// BitLockerKeyInfo holds BitLocker key data with metadata.
 type BitLockerKeyInfo struct {
 	Key       string    `json:"key"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -35,18 +40,23 @@ type BitLockerKeyInfo struct {
 func New(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path+"?_busy_timeout=10000&_journal_mode=WAL")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open sqlite database: %w", err)
 	}
 	s := &Store{db: db}
 	if err := s.initSchema(); err != nil {
-		db.Close()
+		s.Close() // nolint:errcheck // fine to ignore error on failed init
 		return nil, err
 	}
 	return s, nil
 }
 
 // Close closes the underlying DB connection.
-func (s *Store) Close() error { return s.db.Close() }
+func (s *Store) Close() error {
+	if err := s.db.Close(); err != nil {
+		return fmt.Errorf("failed to close database: %w", err)
+	}
+	return nil
+}
 
 // initSchema creates tables if they do not yet exist.
 func (s *Store) initSchema() error {
@@ -85,11 +95,13 @@ CREATE TABLE IF NOT EXISTS audit_logs(
     remote_addr TEXT   NOT NULL,
     timestamp  INTEGER NOT NULL
 );`
-	_, err := s.db.Exec(schema)
-	return err
+	if _, err := s.db.Exec(schema); err != nil {
+		return fmt.Errorf("failed to init schema: %w", err)
+	}
+	return nil
 }
 
-// validateHostname ensures hostname is valid and safe
+// validateHostname ensures hostname is valid and safe.
 func validateHostname(hostname string) error {
 	if hostname == "" {
 		return errors.New("hostname cannot be empty")
@@ -110,16 +122,21 @@ func (s *Store) getMachineID(ctx context.Context, host string) (int64, error) {
 		return 0, err
 	}
 
-	var id int64
-	err := s.db.QueryRowContext(ctx, `SELECT id FROM machines WHERE hostname = ?`, host).Scan(&id)
-	if err == sql.ErrNoRows {
+	var machineID int64
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM machines WHERE hostname = ?`, host).Scan(&machineID)
+	if errors.Is(err, sql.ErrNoRows) {
 		res, err2 := s.db.ExecContext(ctx, `INSERT INTO machines(hostname) VALUES (?)`, host)
 		if err2 != nil {
-			return 0, err2
+			return 0, fmt.Errorf("failed to insert new machine: %w", err2)
 		}
-		id, err = res.LastInsertId()
+		machineID, err = res.LastInsertId()
+		if err != nil {
+			return 0, fmt.Errorf("failed to get last insert id: %w", err)
+		}
+	} else if err != nil {
+		return 0, fmt.Errorf("failed to query machine id: %w", err)
 	}
-	return id, err
+	return machineID, nil
 }
 
 // RotatePassword saves a new Administrator password for host and writes an audit entry.
@@ -128,37 +145,44 @@ func (s *Store) RotatePassword(ctx context.Context, host, password, actor, remot
 		return errors.New("password cannot be empty")
 	}
 	if actor == "" {
-		actor = "unknown"
+		actor = actorUnknown
 	}
-	id, err := s.getMachineID(ctx, host)
+	machineID, err := s.getMachineID(ctx, host)
 	if err != nil {
 		return err
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
+	defer func() {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+			log.Printf("failed to rollback transaction: %v", err)
+		}
+	}()
 
 	now := time.Now().Unix()
 	if _, err = tx.ExecContext(ctx,
 		`REPLACE INTO passwords(machine_id, password, updated_at, actor) VALUES (?,?,?,?)`,
-		id, password, now, actor); err != nil {
-		tx.Rollback()
-		return err
+		machineID, password, now, actor); err != nil {
+		return fmt.Errorf("failed to replace password: %w", err)
 	}
 	if _, err = tx.ExecContext(ctx,
 		`INSERT INTO audit_logs(machine_id, action, actor, remote_addr, timestamp) VALUES (?,?,?,?,?)`,
-		id, "rotate_password", actor, remoteAddr, now); err != nil {
-		tx.Rollback()
-		return err
+		machineID, "rotate_password", actor, remoteAddr, now); err != nil {
+		return fmt.Errorf("failed to insert audit log for password rotation: %w", err)
 	}
 	return tx.Commit()
 }
 
 // GetPassword returns the latest password info for host and logs the access.
 func (s *Store) GetPassword(ctx context.Context, host, actor, remoteAddr string) (*PasswordInfo, error) {
-	id, err := s.getMachineID(ctx, host)
+	if actor == "" {
+		actor = actorUnknown
+	}
+
+	machineID, err := s.getMachineID(ctx, host)
 	if err != nil {
 		return nil, err
 	}
@@ -172,22 +196,19 @@ func (s *Store) GetPassword(ctx context.Context, host, actor, remoteAddr string)
            JOIN machines m ON p.machine_id = m.id
           WHERE m.hostname = ?`,
 		host).Scan(&pw, &updatedAt, &pwActor)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("no password recorded for host %s", host)
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to scan password row: %w", err)
 	}
 
 	// Log the password retrieval
-	if actor == "" {
-		actor = "unknown"
-	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO audit_logs(machine_id, action, actor, remote_addr, timestamp) VALUES (?,?,?,?,?)`,
-		id, "fetch_password", actor, remoteAddr, time.Now().Unix())
+		machineID, "fetch_password", actor, remoteAddr, time.Now().Unix())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to insert audit log for password fetch: %w", err)
 	}
 
 	return &PasswordInfo{
@@ -203,37 +224,44 @@ func (s *Store) UpdateBDEKey(ctx context.Context, host, keyText, actor, remoteAd
 		return errors.New("recovery key cannot be empty")
 	}
 	if actor == "" {
-		actor = "unknown"
+		actor = actorUnknown
 	}
-	id, err := s.getMachineID(ctx, host)
+	machineID, err := s.getMachineID(ctx, host)
 	if err != nil {
 		return err
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
+	defer func() {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+			log.Printf("failed to rollback transaction: %v", err)
+		}
+	}()
 
 	now := time.Now().Unix()
 	if _, err = tx.ExecContext(ctx,
 		`REPLACE INTO bitlocker_keys(machine_id, key_text, updated_at, actor) VALUES (?,?,?,?)`,
-		id, keyText, now, actor); err != nil {
-		tx.Rollback()
-		return err
+		machineID, keyText, now, actor); err != nil {
+		return fmt.Errorf("failed to replace bitlocker key: %w", err)
 	}
 	if _, err = tx.ExecContext(ctx,
 		`INSERT INTO audit_logs(machine_id, action, actor, remote_addr, timestamp) VALUES (?,?,?,?,?)`,
-		id, "update_key", actor, remoteAddr, now); err != nil {
-		tx.Rollback()
-		return err
+		machineID, "update_key", actor, remoteAddr, now); err != nil {
+		return fmt.Errorf("failed to insert audit log for key update: %w", err)
 	}
 	return tx.Commit()
 }
 
 // GetBDEKey returns the BitLocker recovery key info for host and logs the access.
 func (s *Store) GetBDEKey(ctx context.Context, host, actor, remoteAddr string) (*BitLockerKeyInfo, error) {
-	id, err := s.getMachineID(ctx, host)
+	if actor == "" {
+		actor = actorUnknown
+	}
+
+	machineID, err := s.getMachineID(ctx, host)
 	if err != nil {
 		return nil, err
 	}
@@ -247,22 +275,19 @@ func (s *Store) GetBDEKey(ctx context.Context, host, actor, remoteAddr string) (
            JOIN machines m ON k.machine_id = m.id
           WHERE m.hostname = ?`,
 		host).Scan(&key, &updatedAt, &keyActor)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("no recovery key for host %s", host)
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to scan bde key row: %w", err)
 	}
 
 	// Log the key retrieval
-	if actor == "" {
-		actor = "unknown"
-	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO audit_logs(machine_id, action, actor, remote_addr, timestamp) VALUES (?,?,?,?,?)`,
-		id, "fetch_bde_key", actor, remoteAddr, time.Now().Unix())
+		machineID, "fetch_bde_key", actor, remoteAddr, time.Now().Unix())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to insert audit log for bde key fetch: %w", err)
 	}
 
 	return &BitLockerKeyInfo{
