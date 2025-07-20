@@ -8,26 +8,33 @@ import (
 	"github.com/jottavia/ships-go/internal/store"
 )
 
+const (
+	actorAPIUser = "api-user"
+)
+
+// API wraps the store and registers handlers.
 type API struct{ st *store.Store }
 
-// RotateRequest represents the JSON payload for password rotation
+// RotateRequest represents the JSON payload for password rotation.
 type RotateRequest struct {
 	Hostname string `json:"host" binding:"required"`
 	Password string `json:"password" binding:"required"`
 	Actor    string `json:"actor"`
 }
 
-// UpdateKeyRequest represents the JSON payload for BitLocker key updates
+// UpdateKeyRequest represents the JSON payload for BitLocker key updates.
 type UpdateKeyRequest struct {
 	Hostname string `json:"host" binding:"required"`
 	Key      string `json:"key" binding:"required"`
 	Actor    string `json:"actor"`
 }
 
+// New creates a new API handler.
 func New(st *store.Store) *API {
 	return &API{st: st}
 }
 
+// Register registers the API routes.
 func (a *API) Register(r *gin.Engine) {
 	v1 := r.Group("/api/v1")
 	v1.GET("/password/:host", a.getPassword)
@@ -36,7 +43,7 @@ func (a *API) Register(r *gin.Engine) {
 	v1.POST("/update_key", a.updateKey)
 }
 
-// getRemoteAddr extracts the remote address from the request
+// getRemoteAddr extracts the remote address from the request.
 func getRemoteAddr(c *gin.Context) string {
 	// Check for X-Forwarded-For header first (proxy)
 	if xff := c.GetHeader("X-Forwarded-For"); xff != "" {
@@ -54,7 +61,7 @@ func (a *API) getPassword(c *gin.Context) {
 	hostname := c.Param("host")
 	actor := c.GetHeader("X-Actor") // Allow override via header
 	if actor == "" {
-		actor = "api-user"
+		actor = actorAPIUser
 	}
 	remoteAddr := getRemoteAddr(c)
 
@@ -75,7 +82,7 @@ func (a *API) rotate(c *gin.Context) {
 	}
 
 	if req.Actor == "" {
-		req.Actor = "api-user"
+		req.Actor = actorAPIUser
 	}
 	remoteAddr := getRemoteAddr(c)
 
@@ -95,7 +102,7 @@ func (a *API) getBDEKey(c *gin.Context) {
 	hostname := c.Param("host")
 	actor := c.GetHeader("X-Actor") // Allow override via header
 	if actor == "" {
-		actor = "api-user"
+		actor = actorAPIUser
 	}
 	remoteAddr := getRemoteAddr(c)
 
@@ -116,7 +123,7 @@ func (a *API) updateKey(c *gin.Context) {
 	}
 
 	if req.Actor == "" {
-		req.Actor = "api-user"
+		req.Actor = actorAPIUser
 	}
 	remoteAddr := getRemoteAddr(c)
 
