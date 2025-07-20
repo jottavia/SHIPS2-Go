@@ -36,7 +36,7 @@ lint:
 
 ## Run unit tests
 test:
-	$(GO) test -v $(PKG_DIR)
+	$(GO) test -v -race -coverprofile=coverage.out $(PKG_DIR)
 
 ## Cross‑compile Windows client from Linux/macOS
 windows:
