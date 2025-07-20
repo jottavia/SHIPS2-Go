@@ -14,6 +14,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -30,17 +31,24 @@ const defaultServer = "http://localhost:8080"
 var version = "1.0.0" // SHIPS2-Go v1.0.0 Production Release
 
 func main() {
-	if len(os.Args) < 2 {
-		usageAndExit("missing command")
+	if err := run(os.Args); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run(args []string) error {
+	if len(args) < 2 {
+		usageAndExitf("missing command")
 	}
 
-	cmd := os.Args[1]
-	args := os.Args[2:]
+	cmd := args[1]
+	cmdArgs := args[2:]
 
 	// Handle version command
 	if cmd == "version" || cmd == "--version" || cmd == "-v" {
 		fmt.Printf("shipsc %s\n", version)
-		return
+		return nil
 	}
 
 	server := os.Getenv("SHIPS_SERVER")
@@ -50,39 +58,34 @@ func main() {
 	// guarantee no trailing slash
 	server = strings.TrimRight(server, "/")
 
-	var err error
 	switch cmd {
 	case "fetch":
-		err = cmdFetch(server, args)
+		return cmdFetch(server, cmdArgs)
 	case "rotate":
-		err = cmdRotate(server, args)
+		return cmdRotate(server, cmdArgs)
 	case "bde":
-		err = cmdBDE(server, args)
+		return cmdBDE(server, cmdArgs)
 	case "update-key", "update_key":
-		err = cmdUpdateKey(server, args)
+		return cmdUpdateKey(server, cmdArgs)
 	case "help", "-h", "--help":
-		usageAndExit("")
+		usageAndExitf("")
 	default:
-		usageAndExit("unknown command: %s", cmd)
+		usageAndExitf("unknown command: %s", cmd)
 	}
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
+	return nil
 }
 
-func usageAndExit(format string, a ...interface{}) {
+func usageAndExitf(format string, a ...interface{}) {
 	if format != "" {
 		fmt.Fprintf(os.Stderr, format+"\n\n", a...)
 	}
-	fmt.Fprintf(os.Stderr, "SHIPS2-Go client usage:\n")
-	fmt.Fprintf(os.Stderr, "  shipsc fetch HOSTNAME\n")
-	fmt.Fprintf(os.Stderr, "  shipsc rotate HOSTNAME NEWPASSWORD [-actor name]\n")
-	fmt.Fprintf(os.Stderr, "  shipsc bde HOSTNAME\n")
-	fmt.Fprintf(os.Stderr, "  shipsc update-key HOSTNAME 48-DIGIT-KEY [-actor name]\n")
-	fmt.Fprintf(os.Stderr, "  shipsc version\n")
-	fmt.Fprintf(os.Stderr, "\nEnv vars:\n")
+	fmt.Fprintln(os.Stderr, "SHIPS2-Go client usage:")
+	fmt.Fprintln(os.Stderr, "  shipsc fetch HOSTNAME")
+	fmt.Fprintln(os.Stderr, "  shipsc rotate HOSTNAME NEWPASSWORD [-actor name]")
+	fmt.Fprintln(os.Stderr, "  shipsc bde HOSTNAME")
+	fmt.Fprintln(os.Stderr, "  shipsc update-key HOSTNAME 48-DIGIT-KEY [-actor name]")
+	fmt.Fprintln(os.Stderr, "  shipsc version")
+	fmt.Fprintln(os.Stderr, "\nEnv vars:")
 	fmt.Fprintf(os.Stderr, "  SHIPS_SERVER   server base URL (default %s)\n", defaultServer)
 	os.Exit(2)
 }
@@ -100,7 +103,7 @@ func cmdFetch(server string, args []string) error {
 		RotatedAt time.Time `json:"rotated_at"`
 		Actor     string    `json:"actor"`
 	}
-	if err := httpGetJSON(url, &resp); err != nil {
+	if err := httpGetJSON(context.Background(), url, &resp); err != nil {
 		return err
 	}
 
@@ -115,7 +118,7 @@ func cmdRotate(server string, args []string) error {
 	fs := flag.NewFlagSet("rotate", flag.ContinueOnError)
 	actor := fs.String("actor", "manual", "who performed the rotation")
 	if err := fs.Parse(args); err != nil {
-		return err
+		return fmt.Errorf("failed to parse flags: %w", err)
 	}
 	rest := fs.Args()
 	if len(rest) != 2 {
@@ -128,9 +131,12 @@ func cmdRotate(server string, args []string) error {
 		"password": password,
 		"actor":    *actor,
 	}
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
 	url := fmt.Sprintf("%s/api/v1/rotate", server)
-	return httpPost(url, body)
+	return httpPost(context.Background(), url, body)
 }
 
 // cmdBDE GETs the BitLocker key.
@@ -146,7 +152,7 @@ func cmdBDE(server string, args []string) error {
 		UpdatedAt time.Time `json:"updated_at"`
 		Actor     string    `json:"actor"`
 	}
-	if err := httpGetJSON(url, &resp); err != nil {
+	if err := httpGetJSON(context.Background(), url, &resp); err != nil {
 		return err
 	}
 
@@ -161,7 +167,7 @@ func cmdUpdateKey(server string, args []string) error {
 	fs := flag.NewFlagSet("update-key", flag.ContinueOnError)
 	actor := fs.String("actor", "manual", "who provided the key")
 	if err := fs.Parse(args); err != nil {
-		return err
+		return fmt.Errorf("failed to parse flags: %w", err)
 	}
 	rest := fs.Args()
 	if len(rest) != 2 {
@@ -174,20 +180,28 @@ func cmdUpdateKey(server string, args []string) error {
 		"key":   key,
 		"actor": *actor,
 	}
-	body, _ := json.Marshal(payload)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
 	url := fmt.Sprintf("%s/api/v1/update_key", server)
-	return httpPost(url, body)
+	return httpPost(context.Background(), url, body)
 }
 
 //--------------------------------------------------------------------------
 // Helpers
 //--------------------------------------------------------------------------
 
-func httpGetJSON(url string, v interface{}) error {
+func httpGetJSON(ctx context.Context, url string, responseBody interface{}) error {
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(url) // #nosec G107 – server is trusted / controlled
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create http request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("http get failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -195,14 +209,23 @@ func httpGetJSON(url string, v interface{}) error {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("server %s: %s", resp.Status, strings.TrimSpace(string(body)))
 	}
-	return json.NewDecoder(resp.Body).Decode(v)
+	if err := json.NewDecoder(resp.Body).Decode(responseBody); err != nil {
+		return fmt.Errorf("failed to decode json response: %w", err)
+	}
+	return nil
 }
 
-func httpPost(url string, body []byte) error {
+func httpPost(ctx context.Context, url string, body []byte) error {
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Post(url, "application/json", bytes.NewReader(body)) // #nosec G107
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create http request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("http post failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -212,7 +235,9 @@ func httpPost(url string, body []byte) error {
 	}
 
 	// Print the success JSON for scripting convenience.
-	io.Copy(os.Stdout, resp.Body) // nolint:errcheck
-	fmt.Println()                 // Add newline for better formatting
+	if _, err := io.Copy(os.Stdout, resp.Body); err != nil {
+		return fmt.Errorf("failed to write response to stdout: %w", err)
+	}
+	fmt.Println() // Add newline for better formatting
 	return nil
 }
