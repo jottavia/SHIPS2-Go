@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.comcom/gin-gonic/gin"
+	"github.com/gin-gonic/gin"
 	"github.com/jottavia/ships-go/internal/api"
 	"github.com/jottavia/ships-go/internal/store"
 )
