@@ -29,9 +29,9 @@ jobs:
         go mod tidy
     
     - name: golangci-lint
-      uses: golangci/golangci-lint-action@v1.55.2
+      uses: golangci/golangci-lint-action@v8
       with:
-        version: v1.55.2
+        version: v2.1
         args: --timeout=5m
 
   test:
