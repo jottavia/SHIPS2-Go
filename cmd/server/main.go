@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -17,45 +18,13 @@ import (
 
 var version = "1.0.0" // SHIPS2-Go v1.0.0 Production Release
 
-// basicAuthMiddleware provides optional HTTP Basic Auth
-func basicAuthMiddleware(username, password string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if username == "" || password == "" {
-			// No auth configured, skip
-			c.Next()
-			return
-		}
-
-		user, pass, hasAuth := c.Request.BasicAuth()
-		if !hasAuth {
-			c.Header("WWW-Authenticate", "Basic realm=SHIPS2-Go")
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-
-		// Use subtle.ConstantTimeCompare to prevent timing attacks
-		userMatch := subtle.ConstantTimeCompare([]byte(user), []byte(username)) == 1
-		passMatch := subtle.ConstantTimeCompare([]byte(pass), []byte(password)) == 1
-
-		if !userMatch || !passMatch {
-			c.Header("WWW-Authenticate", "Basic realm=SHIPS2-Go")
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-
-		c.Next()
+func main() {
+	if err := run(); err != nil {
+		log.Fatalf("server error: %v", err)
 	}
 }
 
-// loggingMiddleware logs all requests
-func loggingMiddleware() gin.HandlerFunc {
-	return gin.LoggerWithWriter(os.Stdout)
-}
-
-func main() {
-	// Run in release mode to avoid debug logging.
-	gin.SetMode(gin.ReleaseMode)
-
+func run() error {
 	// --- Configuration via environment variables ---------------------------
 	dbPath := os.Getenv("SHIPS_DB")
 	if dbPath == "" {
@@ -82,42 +51,19 @@ func main() {
 	}
 
 	// --- Open the SQLite store -------------------------------------------
-	st, err := store.New(dbPath)
+	storage, err := store.New(dbPath)
 	if err != nil {
-		log.Fatalf("opening db: %v", err)
+		return fmt.Errorf("opening db: %w", err)
 	}
-	defer st.Close()
+	defer storage.Close()
 
 	// --- Build Gin router --------------------------------------------------
-	r := gin.New()
-	r.Use(gin.Recovery())
-	r.Use(loggingMiddleware())
+	router := setupRouter(storage, authUser, authPass)
 
-	// Add optional basic auth middleware
-	if authUser != "" && authPass != "" {
-		r.Use(basicAuthMiddleware(authUser, authPass))
-	}
-
-	// Liveness probe for systemd / Kubernetes or simple curl checks.
-	r.GET("/healthz", func(c *gin.Context) {
-		c.String(http.StatusOK, "ok")
-	})
-
-	// Version endpoint
-	r.GET("/version", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"version": version,
-			"service": "SHIPS2-Go",
-			"status":  "Production Ready",
-		})
-	})
-
-	// Register the version‑1 API under /api/v1/…
-	api.New(st).Register(r)
-
+	// --- Setup and run HTTP server -----------------------------------------
 	srv := &http.Server{
 		Addr:         addr,
-		Handler:      r,
+		Handler:      router,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  120 * time.Second,
@@ -126,8 +72,9 @@ func main() {
 	// --- Start the HTTP server in a goroutine -----------------------------
 	go func() {
 		log.Printf("SHIPS2-Go server v%s listening on %s", version, addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server error: %v", err)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			// Cannot use log.Fatalf here as it calls os.Exit, which would prevent graceful shutdown.
+			log.Printf("listen and serve error: %v", err)
 		}
 	}()
 
@@ -140,7 +87,63 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("graceful shutdown failed: %v", err)
+		return fmt.Errorf("graceful shutdown failed: %w", err)
 	}
 	log.Printf("SHIPS2-Go server v%s stopped cleanly", version)
+	return nil
+}
+
+func setupRouter(storage *store.Store, user, pass string) *gin.Engine {
+	// Run in release mode to avoid debug logging.
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(gin.LoggerWithWriter(os.Stdout))
+
+	// Add optional basic auth middleware
+	if user != "" && pass != "" {
+		router.Use(basicAuthMiddleware(user, pass))
+	}
+
+	// Liveness probe for systemd / Kubernetes or simple curl checks.
+	router.GET("/healthz", func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	// Version endpoint
+	router.GET("/version", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"version": version,
+			"service": "SHIPS2-Go",
+			"status":  "Production Ready",
+		})
+	})
+
+	// Register the version‑1 API under /api/v1/…
+	api.New(storage).Register(router)
+	return router
+}
+
+// basicAuthMiddleware provides optional HTTP Basic Auth.
+func basicAuthMiddleware(username, password string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, pass, hasAuth := c.Request.BasicAuth()
+		if !hasAuth {
+			c.Header("WWW-Authenticate", "Basic realm=SHIPS2-Go")
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+
+		// Use subtle.ConstantTimeCompare to prevent timing attacks
+		userMatch := subtle.ConstantTimeCompare([]byte(user), []byte(username)) == 1
+		passMatch := subtle.ConstantTimeCompare([]byte(pass), []byte(password)) == 1
+
+		if !userMatch || !passMatch {
+			c.Header("WWW-Authenticate", "Basic realm=SHIPS2-Go")
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+
+		c.Next()
+	}
 }
