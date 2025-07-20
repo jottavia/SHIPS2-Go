@@ -1,4 +1,4 @@
-version: 2
+version: "2"
 run:
   timeout: 5m
   modules-download-mode: readonly
@@ -72,7 +72,7 @@ linters:
     - whitespace
     - wrapcheck
 
-linters-settings:
+linters-setting:
   gocyclo:
     min-complexity: 15
   
@@ -116,7 +116,7 @@ linters-settings:
       - v
 
 issues:
-  exclude-rules:
+  exclude:
     - path: _test\.go
       linters:
         - gocyclo
