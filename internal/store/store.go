@@ -44,7 +44,8 @@ func New(path string) (*Store, error) {
 	}
 	s := &Store{db: db}
 	if err := s.initSchema(); err != nil {
-		s.Close() //nolint:errcheck // fine to ignore error on failed init
+		//nolint:errcheck // fine to ignore error on failed init
+		s.Close()
 		return nil, err
 	}
 	return s, nil
@@ -109,7 +110,7 @@ func validateHostname(hostname string) error {
 	if len(hostname) > 253 {
 		return errors.New("hostname too long")
 	}
-	// Basic validation - could be expanded
+	// Basic validation - could be expanded.
 	if strings.ContainsAny(hostname, " \t\n\r") {
 		return errors.New("hostname contains invalid characters")
 	}
@@ -144,22 +145,24 @@ func (s *Store) RotatePassword(ctx context.Context, host, password, actor, remot
 	if password == "" {
 		return errors.New("password cannot be empty")
 	}
-	return s.updateAndAudit(ctx, host, actor, remoteAddr, "rotate_password",
-		`REPLACE INTO passwords(machine_id, password, updated_at, actor) VALUES (?,?,?,?)`,
-		password,
-	)
+	query := `REPLACE INTO passwords(machine_id, password, updated_at, actor) VALUES (?,?,?,?)`
+	return s.updateAndAudit(ctx, host, actor, remoteAddr, "rotate_password", query, password)
 }
 
 // GetPassword returns the latest password info for host and logs the access.
 func (s *Store) GetPassword(ctx context.Context, host, actor, remoteAddr string) (*PasswordInfo, error) {
 	info := &PasswordInfo{}
-	err := s.getAndAudit(ctx, host, actor, remoteAddr, "fetch_password",
-		`SELECT p.password, p.updated_at, p.actor FROM passwords p JOIN machines m ON p.machine_id = m.id WHERE m.hostname = ?`,
-		&info.Password, &info.RotatedAt, &info.Actor,
-	)
+	var unixTime int64
+	query := `SELECT p.password, p.updated_at, p.actor
+		FROM passwords p
+		JOIN machines m ON p.machine_id = m.id
+		WHERE m.hostname = ?`
+
+	err := s.getAndAudit(ctx, host, actor, remoteAddr, "fetch_password", query, &info.Password, &unixTime, &info.Actor)
 	if err != nil {
 		return nil, err
 	}
+	info.RotatedAt = time.Unix(unixTime, 0)
 	return info, nil
 }
 
@@ -168,27 +171,29 @@ func (s *Store) UpdateBDEKey(ctx context.Context, host, keyText, actor, remoteAd
 	if keyText == "" {
 		return errors.New("recovery key cannot be empty")
 	}
-	return s.updateAndAudit(ctx, host, actor, remoteAddr, "update_key",
-		`REPLACE INTO bitlocker_keys(machine_id, key_text, updated_at, actor) VALUES (?,?,?,?)`,
-		keyText,
-	)
+	query := `REPLACE INTO bitlocker_keys(machine_id, key_text, updated_at, actor) VALUES (?,?,?,?)`
+	return s.updateAndAudit(ctx, host, actor, remoteAddr, "update_key", query, keyText)
 }
 
 // GetBDEKey returns the BitLocker recovery key info for host and logs the access.
 func (s *Store) GetBDEKey(ctx context.Context, host, actor, remoteAddr string) (*BitLockerKeyInfo, error) {
 	info := &BitLockerKeyInfo{}
-	err := s.getAndAudit(ctx, host, actor, remoteAddr, "fetch_bde_key",
-		`SELECT k.key_text, k.updated_at, k.actor FROM bitlocker_keys k JOIN machines m ON k.machine_id = m.id WHERE m.hostname = ?`,
-		&info.Key, &info.UpdatedAt, &info.Actor,
-	)
+	var unixTime int64
+	query := `SELECT k.key_text, k.updated_at, k.actor
+		FROM bitlocker_keys k
+		JOIN machines m ON k.machine_id = m.id
+		WHERE m.hostname = ?`
+
+	err := s.getAndAudit(ctx, host, actor, remoteAddr, "fetch_bde_key", query, &info.Key, &unixTime, &info.Actor)
 	if err != nil {
 		return nil, err
 	}
+	info.UpdatedAt = time.Unix(unixTime, 0)
 	return info, nil
 }
 
-// private helper to reduce duplication
-func (s *Store) updateAndAudit(ctx context.Context, host, actor, remoteAddr, auditAction, query string, args ...interface{}) error {
+// updateAndAudit is a private helper to reduce duplication for update operations.
+func (s *Store) updateAndAudit(ctx context.Context, host, actor, remoteAddr, auditAction, query string, val string) error {
 	if actor == "" {
 		actor = actorUnknown
 	}
@@ -208,16 +213,12 @@ func (s *Store) updateAndAudit(ctx context.Context, host, actor, remoteAddr, aud
 	}()
 
 	now := time.Now().Unix()
-	fullArgs := append([]interface{}{machineID}, args...)
-	fullArgs = append(fullArgs, now, actor)
-
-	if _, err = tx.ExecContext(ctx, query, fullArgs...); err != nil {
+	if _, err = tx.ExecContext(ctx, query, machineID, val, now, actor); err != nil {
 		return fmt.Errorf("failed to execute update: %w", err)
 	}
 
-	if _, err = tx.ExecContext(ctx,
-		`INSERT INTO audit_logs(machine_id, action, actor, remote_addr, timestamp) VALUES (?,?,?,?,?)`,
-		machineID, auditAction, actor, remoteAddr, now); err != nil {
+	auditQuery := `INSERT INTO audit_logs(machine_id, action, actor, remote_addr, timestamp) VALUES (?,?,?,?,?)`
+	if _, err = tx.ExecContext(ctx, auditQuery, machineID, auditAction, actor, remoteAddr, now); err != nil {
 		return fmt.Errorf("failed to insert audit log for %s: %w", auditAction, err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -226,7 +227,7 @@ func (s *Store) updateAndAudit(ctx context.Context, host, actor, remoteAddr, aud
 	return nil
 }
 
-// private helper to reduce duplication
+// getAndAudit is a private helper to reduce duplication for get operations.
 func (s *Store) getAndAudit(ctx context.Context, host, actor, remoteAddr, auditAction, query string, dest ...interface{}) error {
 	if actor == "" {
 		actor = actorUnknown
@@ -246,9 +247,8 @@ func (s *Store) getAndAudit(ctx context.Context, host, actor, remoteAddr, auditA
 	}
 
 	// Log the retrieval
-	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO audit_logs(machine_id, action, actor, remote_addr, timestamp) VALUES (?,?,?,?,?)`,
-		machineID, auditAction, actor, remoteAddr, time.Now().Unix())
+	auditQuery := `INSERT INTO audit_logs(machine_id, action, actor, remote_addr, timestamp) VALUES (?,?,?,?,?)`
+	_, err = s.db.ExecContext(ctx, auditQuery, machineID, auditAction, actor, remoteAddr, time.Now().Unix())
 	if err != nil {
 		return fmt.Errorf("failed to insert audit log for %s: %w", auditAction, err)
 	}
