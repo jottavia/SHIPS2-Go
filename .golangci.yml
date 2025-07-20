@@ -17,7 +17,7 @@ linters:
     - errname
     - errorlint
     - exhaustive
-    - forbidigo
+    # - forbidigo # Disabled as it's too strict for a CLI app printing to stdout
     - forcetypeassert
     - funlen
     - gochecknoglobals
@@ -69,70 +69,70 @@ linters:
     - wastedassign
     - whitespace
     - wrapcheck
-  settings:
-    gocyclo:
-      min-complexity: 15
 
-    golint:
-      min-confidence: 0
+settings:
+  gocyclo:
+    min-complexity: 15
 
-    govet:
-      check-shadowing: true
+  govet:
+    check-shadowing: true
 
-    lll:
-      line-length: 120
+  lll:
+    line-length: 120
 
-    maligned:
-      suggest-new: true
-
-    misspell:
-      locale: US
-    
-    funlen:
-      lines: 100
-      statements: 50
-    
-    gosec:
-      excludes:
-        - G107 # Potential HTTP request made with variable url
-        - G204 # Subprocess launched with variable
-    
-    varnamelen:
-      min-name-length: 2
-      ignore-names:
-        - id
-        - db
-        - tx
-        - st
-        - r
-        - w
-        - c
-        - i
-        - j
-        - k
-        - v
-  exclusions:
-    rules:
-      - path: _test\.go
-        linters:
-          - gocyclo
-          - errcheck
-          - dupl
-          - gosec
-          - funlen
-          - gocognit
-
-      - path: cmd/
-        linters:
-          - gochecknoglobals
-
-      - text: "weak cryptographic primitive"
-        linters:
-          - gosec
-
-      - text: "should not use dot imports"
-        linters:
-          - revive
+  misspell:
+    locale: US
   
-  max-issues-per-linter: 0
-  max-same-issues: 0
+  funlen:
+    lines: 100
+    statements: 50
+  
+  gosec:
+    excludes:
+      - G107 # Potential HTTP request made with variable url
+      - G204 # Subprocess launched with variable
+  
+  varnamelen:
+    min-name-length: 2
+    # Add common short variable names to ignore
+    ignore-names:
+      - a
+      - c
+      - db
+      - i
+      - id
+      - j
+      - k
+      - r
+      - s
+      - st
+      - t
+      - tx
+      - v
+      - w
+      
+exclusions:
+  rules:
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - funlen
+        - gocognit
+
+    - path: cmd/
+      linters:
+        - gochecknoglobals
+
+    - text: "weak cryptographic primitive"
+      linters:
+        - gosec
+
+    - text: "should not use dot imports"
+      linters:
+        - revive
+
+max-issues-per-linter: 0
+max-same-issues: 0
