@@ -29,10 +29,9 @@ jobs:
         go mod tidy
     
     - name: golangci-lint
-      uses: golangci/golangci-lint-action@v8
+      # Downgraded to a version compatible with golangci-lint v1.x
+      uses: golangci/golangci-lint-action@v6.0.1
       with:
-        # Using a specific version is best practice for reproducible builds.
-        # v1.59.1 is the last minor release of v1.
         version: v1.59.1
 
   test:
