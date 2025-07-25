@@ -21,8 +21,8 @@ jobs:
         with:
           go-version: '1.22'
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v6
         with:
-          version: v2.2.2
+          version: v1.59.1
           args: --timeout=10m
           # Remove any references to deprecated linters
