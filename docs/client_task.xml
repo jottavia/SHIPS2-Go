@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<!--
+    Scheduled Task: SHIPS2-Go Daily Rotation v1.0
+    ------------------------------------------------------------
+    • Runs shipsc.exe twice daily:
+        1) rotate   – generate & escrow a new Administrator password
+        2) update-key – escrow the current BitLocker 48‑digit key
+    • Randomizes start time to avoid thundering-herd effects
+    • Runs as SYSTEM with highest privileges
+    • Compatible with Windows 10/11
+    • Enhanced error handling and logging
+-->
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Date>2025-07-19T00:00:00</Date>
+    <Author>SHIPS2-Go v1.0</Author>
+    <Description>Escrow local Administrator password and BitLocker recovery key to SHIPS2-Go server with enhanced security and logging.</Description>
+    <URI>\SHIPS2-Go\Daily Rotation</URI>
+  </RegistrationInfo>
+  
+  <Triggers>
+    <!-- Boot trigger with random delay to avoid thundering herd -->
+    <BootTrigger>
+      <Enabled>true</Enabled>
+      <Delay>PT5M</Delay>
+      <RandomDelay>PT60M</RandomDelay>
+    </BootTrigger>
+    
+    <!-- Daily at 3 AM with random 30-minute window -->
+    <CalendarTrigger>
+      <StartBoundary>2025-07-19T03:00:00</StartBoundary>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+      <RandomDelay>PT30M</RandomDelay>
+      <Enabled>true</Enabled>
+    </CalendarTrigger>
+  </Triggers>
+  
+  <Principals>
+    <Principal id="Author">
+      <UserId>S-1-5-18</UserId> <!-- SYSTEM -->
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>true</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <DisallowStartOnRemoteAppSession>false</DisallowStartOnRemoteAppSession>
+    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT30M</ExecutionTimeLimit>
+    <Priority>7</Priority>
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>3</Count>
+    </RestartOnFailure>
+  </Settings>
+  
+  <Actions Context="Author">
+    <!-- Action 1: Rotate Administrator password -->
+    <Exec>
+      <Command>"C:\Program Files\Ships\shipsc.exe"</Command>
+      <Arguments>rotate %COMPUTERNAME% -actor "ScheduledTask"</Arguments>
+      <WorkingDirectory>"C:\Program Files\Ships"</WorkingDirectory>
+    </Exec>
+    
+    <!-- Action 2: Update BitLocker recovery key -->
+    <Exec>
+      <Command>powershell.exe</Command>
+      <Arguments>-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "try { $ErrorActionPreference = 'Stop'; $key = (Get-BitLockerVolume -MountPoint C:).KeyProtector | Where-Object {$_.KeyProtectorType -eq 'RecoveryPassword'} | Select-Object -First 1 -ExpandProperty RecoveryPassword; if ($key) { &amp; 'C:\Program Files\Ships\shipsc.exe' update-key $env:COMPUTERNAME $key -actor 'ScheduledTask' } else { Write-EventLog -LogName Application -Source 'SHIPS2-Go' -EventId 1001 -EntryType Warning -Message 'No BitLocker recovery key found for C: drive' } } catch { Write-EventLog -LogName Application -Source 'SHIPS2-Go' -EventId 1002 -EntryType Error -Message \"BitLocker key update failed: $($_.Exception.Message)\" }"</Arguments>
+      <WorkingDirectory>"C:\Program Files\Ships"</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

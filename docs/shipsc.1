@@ -1,0 +1,71 @@
+.TH SHIPSC 1 "July 2025" "SHIPS2-Go 1.0.0" "User Commands"
+.SH NAME
+shipsc \- SHIPS2-Go client for password escrow and BitLocker key management
+.SH SYNOPSIS
+.B shipsc
+.I COMMAND
+.RI [ OPTIONS ]
+.RI [ ARGUMENTS ]
+.SH DESCRIPTION
+.B shipsc
+is the command-line client for the SHIPS2-Go password escrow service. It provides secure password rotation and BitLocker recovery key management for Windows workstations in workgroup environments.
+.SH COMMANDS
+.TP
+.B fetch HOSTNAME
+Retrieve the current Administrator password for the specified hostname.
+.TP
+.B rotate HOSTNAME [PASSWORD] [\-actor NAME]
+Rotate the Administrator password for the specified hostname. If PASSWORD is not provided, a secure password will be generated automatically. The optional \-actor flag specifies who performed the rotation.
+.TP
+.B bde HOSTNAME
+Retrieve the BitLocker recovery key for the specified hostname.
+.TP
+.B update-key HOSTNAME KEY [\-actor NAME]
+Store or update the BitLocker recovery key for the specified hostname. The optional \-actor flag specifies who provided the key.
+.TP
+.B version
+Display the version information.
+.TP
+.B help
+Display help information.
+.SH OPTIONS
+.TP
+.B \-actor NAME
+Specify the actor (person or system) performing the action. This is recorded in audit logs for accountability.
+.SH ENVIRONMENT
+.TP
+.B SHIPS_SERVER
+Base URL of the SHIPS2-Go server. Defaults to http://localhost:8080.
+.SH EXAMPLES
+.TP
+Fetch a password:
+.B shipsc fetch WINBOX01
+.TP
+Rotate a password with automatic generation:
+.B shipsc rotate WINBOX01 \-actor admin
+.TP
+Rotate a password with specific value:
+.B shipsc rotate WINBOX01 NewSecurePass123! \-actor admin
+.TP
+Retrieve BitLocker key:
+.B shipsc bde WINBOX01
+.TP
+Update BitLocker key:
+.B shipsc update-key WINBOX01 123456-123456-123456-123456-123456-123456-123456-123456 \-actor admin
+.SH FILES
+.TP
+.I /opt/ships/bin/shipsc
+The shipsc binary (Linux)
+.TP
+.I C:\\Program Files\\Ships\\shipsc.exe
+The shipsc binary (Windows)
+.SH SECURITY
+All operations are logged and audited. The client communicates with the server over HTTP, but the server typically binds only to localhost (127.0.0.1) for security. External access is provided through SSH with restricted commands.
+.SH SEE ALSO
+.B ships-server(8), ssh(1)
+.SH AUTHOR
+SHIPS2-Go Project
+.SH REPORTING BUGS
+Report bugs to: https://github.com/jottavia/ships-go/issues
+.SH COPYRIGHT
+Copyright (c) 2025 Joseph V. Ottaviano. This is free software; see the source for copying conditions.

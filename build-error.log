@@ -1,0 +1,4 @@
+cmd\server\main.go:13:5: missing go.sum entry for module providing package github.com/gin-gonic/gin (imported by github.com/jottavia/SHIPS2-Go/cmd/server); to add:
+	go get github.com/jottavia/SHIPS2-Go/cmd/server
+internal\store\store.go:12:5: missing go.sum entry for module providing package modernc.org/sqlite (imported by github.com/jottavia/SHIPS2-Go/internal/store); to add:
+	go get github.com/jottavia/SHIPS2-Go/internal/store

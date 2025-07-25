@@ -1,0 +1,35 @@
+[Unit]
+Description=SHIPS2-Go password escrow server
+Documentation=https://github.com/jottavia/ships-go
+After=network.target
+
+[Service]
+Type=simple
+User=ships
+Group=ships
+ExecStart=/opt/ships/bin/ships-server
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+
+# Environment variables
+Environment=SHIPS_ADDR=127.0.0.1:8080
+Environment=SHIPS_DB=/var/lib/ships/ships.db
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/ships
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ships-server
+
+[Install]
+WantedBy=multi-user.target

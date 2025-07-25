@@ -1,0 +1,7 @@
+<group name="local,ships-go">
+  <rule id="91000" level="7">
+    <if_sid>5710</if_sid>
+    <match>shipsc-wrapper</match>
+    <description>SHIPS-go action: $(log)</description>
+  </rule>
+</group>

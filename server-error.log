@@ -1,0 +1,3 @@
+github.com/jottavia/SHIPS2-Go/cmd/server
+# github.com/jottavia/SHIPS2-Go/cmd/server
+cmd\server\main.go:53:24: undefined: gin.DefaultLogFormatter
