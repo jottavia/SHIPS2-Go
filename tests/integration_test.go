@@ -4,9 +4,11 @@ package tests
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,7 +24,7 @@ func TestMain(m *testing.M) {
 
 func setupTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 	// Create temporary database for testing
-tempDB := t.TempDir() + "/test_ships.db"
+	tempDB := t.TempDir() + "/test_ships.db"
 
 	st, err := store.New(tempDB)
 	if err != nil {
@@ -47,7 +49,10 @@ func TestAPICompatibility(t *testing.T) {
 		"password": "TestPassword123!",
 		"actor":    "test-user",
 	}
-	rotateBody, _ := json.Marshal(rotatePayload)
+	rotateBody, err := json.Marshal(rotatePayload)
+	if err != nil {
+		t.Fatalf("Failed to marshal rotation payload: %v", err)
+	}
 
 	resp, err := http.Post(server.URL+"/api/v1/rotate", "application/json", bytes.NewReader(rotateBody))
 	if err != nil {
@@ -112,7 +117,10 @@ func TestBitLockerKeyManagement(t *testing.T) {
 		"key":   "123456-123456-123456-123456-123456-123456-123456-123456",
 		"actor": "test-admin",
 	}
-	keyBody, _ := json.Marshal(keyPayload)
+	keyBody, err := json.Marshal(keyPayload)
+	if err != nil {
+		t.Fatalf("Failed to marshal key payload: %v", err)
+	}
 
 	resp, err := http.Post(server.URL+"/api/v1/update_key", "application/json", bytes.NewReader(keyBody))
 	if err != nil {
@@ -165,7 +173,10 @@ func TestInputValidation(t *testing.T) {
 		"password": "TestPassword123!",
 		"actor":    "test-user",
 	}
-	invalidBody, _ := json.Marshal(invalidPayload)
+	invalidBody, err := json.Marshal(invalidPayload)
+	if err != nil {
+		t.Fatalf("Failed to marshal invalid payload: %v", err)
+	}
 
 	resp, err := http.Post(server.URL+"/api/v1/rotate", "application/json", bytes.NewReader(invalidBody))
 	if err != nil {
@@ -183,7 +194,10 @@ func TestInputValidation(t *testing.T) {
 		"password": "",
 		"actor":    "test-user",
 	}
-	emptyPasswordBody, _ := json.Marshal(emptyPasswordPayload)
+	emptyPasswordBody, err := json.Marshal(emptyPasswordPayload)
+	if err != nil {
+		t.Fatalf("Failed to marshal empty password payload: %v", err)
+	}
 
 	resp, err = http.Post(server.URL+"/api/v1/rotate", "application/json", bytes.NewReader(emptyPasswordBody))
 	if err != nil {
@@ -211,10 +225,12 @@ func TestHealthEndpoint(t *testing.T) {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
 	}
 
-	body := make([]byte, 10)
-	n, _ := resp.Body.Read(body)
-	if string(body[:n]) != "ok" {
-		t.Errorf("Expected 'ok', got %s", string(body[:n]))
+	data, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		t.Fatalf("Failed to read health response: %v", readErr)
+	}
+	if strings.TrimSpace(string(data)) != "ok" {
+		t.Errorf("Expected 'ok', got %s", strings.TrimSpace(string(data)))
 	}
 }
 
@@ -229,9 +245,12 @@ func TestAuditLogging(t *testing.T) {
 		"password": "AuditPassword123!",
 		"actor":    "audit-user",
 	}
-	rotateBody, _ := json.Marshal(rotatePayload)
+	rotateBody, err := json.Marshal(rotatePayload)
+	if err != nil {
+		t.Fatalf("Failed to marshal rotation payload: %v", err)
+	}
 
-	_, err := http.Post(server.URL+"/api/v1/rotate", "application/json", bytes.NewReader(rotateBody))
+	_, err = http.Post(server.URL+"/api/v1/rotate", "application/json", bytes.NewReader(rotateBody))
 	if err != nil {
 		t.Fatalf("Failed to post rotation: %v", err)
 	}
