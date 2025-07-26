@@ -22,8 +22,7 @@ func TestMain(m *testing.M) {
 
 func setupTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 	// Create temporary database for testing
-	tempDB := "/tmp/test_ships.db"
-	os.Remove(tempDB) // Clean up any existing test db
+tempDB := t.TempDir() + "/test_ships.db"
 
 	st, err := store.New(tempDB)
 	if err != nil {
