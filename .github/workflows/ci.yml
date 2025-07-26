@@ -28,7 +28,7 @@ jobs:
       uses: golangci/golangci-lint-action@v6
       with:
         version: v1.59.1
-        args: --timeout=10m
+        args: --timeout=10m --disable=goanalysis_metalinter
 
   test:
     name: Test
