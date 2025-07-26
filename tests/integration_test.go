@@ -11,8 +11,8 @@ import (
     "time"
 
     "github.com/gin-gonic/gin"
-    "github.com/jottavia/ships-go/internal/api"
-    "github.com/jottavia/ships-go/internal/store"
+	"github.com/jottavia/SHIPS2-Go/internal/api"
+	"github.com/jottavia/SHIPS2-Go/internal/store"
 )
 
 func TestMain(m *testing.M) {
