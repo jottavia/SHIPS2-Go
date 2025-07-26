@@ -15,7 +15,7 @@
 set -euo pipefail
 
 # --- vars --------------------------------------------------------------
-DEFAULT_RELEASE_URL="https://github.com/jottavia/ships-go/releases/latest/download"
+DEFAULT_RELEASE_URL="https://github.com/jottavia/SHIPS2-Go/releases/latest/download"
 BIN_URL="${RELEASE_URL:-$DEFAULT_RELEASE_URL}/ships-server"
 WRAPPER_URL="${RELEASE_URL:-$DEFAULT_RELEASE_URL}/shipsc_wrapper.sh"
 CLIENT_URL="${RELEASE_URL:-$DEFAULT_RELEASE_URL}/shipsc"

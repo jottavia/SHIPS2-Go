@@ -3,10 +3,10 @@ cd "C:\GPT Programing\SHIPS2-Go-Working"
 echo Downloading missing dependencies...
 echo.
 echo Getting server dependencies:
-"C:\Program Files\Go\bin\go.exe" get github.com/jottavia/ships-go/cmd/server
+"C:\Program Files\Go\bin\go.exe" get github.com/jottavia/SHIPS2-Go/cmd/server
 echo.
 echo Getting store dependencies:
-"C:\Program Files\Go\bin\go.exe" get github.com/jottavia/ships-go/internal/store
+"C:\Program Files\Go\bin\go.exe" get github.com/jottavia/SHIPS2-Go/internal/store
 echo.
 echo Running go mod tidy:
 "C:\Program Files\Go\bin\go.exe" mod tidy
