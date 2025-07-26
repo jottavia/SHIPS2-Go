@@ -1,13 +1,8 @@
 module github.com/jottavia/SHIPS2-Go
 
-go 1.22
-
-// Removed the toolchain directive to allow CI to control the Go version via
-// workflow settings. The module now relies on whatever toolchain is
-// installed in the environment (Go 1.22 in CI).
+go 1.23
 
 require (
-	// Updated versions to match checksums present in go.sum.
 	github.com/gin-gonic/gin v1.10.1
 	modernc.org/sqlite v1.38.0
 )
