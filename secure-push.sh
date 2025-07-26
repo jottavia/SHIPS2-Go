@@ -18,7 +18,7 @@ fi
 
 # Add GitHub remote (without token)
 git remote remove origin 2>/dev/null || true
-git remote add origin https://github.com/jottavia/ships-go.git
+git remote add origin https://github.com/jottavia/SHIPS2-Go.git
 
 # Create .gitignore
 cat > .gitignore << 'EOF'
@@ -74,5 +74,5 @@ git push -u origin main
 git push --tags
 
 echo "✅ Successfully pushed SHIPS2-Go v1.0.0 to GitHub!"
-echo "🔗 Repository: https://github.com/jottavia/ships-go"
+echo "🔗 Repository: https://github.com/jottavia/SHIPS2-Go"
 echo "🎯 GitHub Actions will now build releases automatically"
