@@ -1,0 +1,81 @@
+# DISABLED BUILD-AND-RELEASE WORKFLOW
+# This workflow has been disabled by renaming to .disabled extension
+# Original workflow content preserved below for reference
+
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [linux, windows, darwin]
+        arch: [amd64, arm64]
+        exclude:
+          - os: windows
+            arch: arm64
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+    
+    - name: Build server
+      env:
+        GOOS: ${{ matrix.os }}
+        GOARCH: ${{ matrix.arch }}
+      run: |
+        if [ "${{ matrix.os }}" = "windows" ]; then
+          go build -o ships-server-${{ matrix.os }}-${{ matrix.arch }}.exe ./cmd/server
+        else
+          go build -o ships-server-${{ matrix.os }}-${{ matrix.arch }} ./cmd/server
+        fi
+    
+    - name: Build client
+      env:
+        GOOS: ${{ matrix.os }}
+        GOARCH: ${{ matrix.arch }}
+      run: |
+        if [ "${{ matrix.os }}" = "windows" ]; then
+          go build -o shipsc-${{ matrix.os }}-${{ matrix.arch }}.exe ./cmd/client
+        else
+          go build -o shipsc-${{ matrix.os }}-${{ matrix.arch }} ./cmd/client
+        fi
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: binaries-${{ matrix.os }}-${{ matrix.arch }}
+        path: |
+          ships-server-*
+          shipsc-*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          binaries-*/ships-server-*
+          binaries-*/shipsc-*
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
