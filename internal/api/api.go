@@ -10,6 +10,9 @@ import (
 
 type API struct{ storeInstance *store.Store }
 
+// defaultAPIActor is used when the client does not specify an actor.
+const defaultAPIActor = "api-user"
+
 // RotateRequest represents the JSON payload for password rotation
 type RotateRequest struct {
     Hostname string `json:"host" binding:"required"`
@@ -54,7 +57,7 @@ func (apiInstance *API) getPassword(ctx *gin.Context) {
     hostname := ctx.Param("host")
     actor := ctx.GetHeader("X-Actor") // Allow override via header
     if actor == "" {
-        actor = "api-user"
+        actor = defaultAPIActor
     }
     remoteAddr := getRemoteAddr(ctx)
 
@@ -80,7 +83,7 @@ func (apiInstance *API) rotate(ctx *gin.Context) {
     }
     
     if req.Actor == "" {
-        req.Actor = "api-user"
+        req.Actor = defaultAPIActor
     }
     remoteAddr := getRemoteAddr(ctx)
 
@@ -107,7 +110,7 @@ func (apiInstance *API) getBDEKey(ctx *gin.Context) {
     hostname := ctx.Param("host")
     actor := ctx.GetHeader("X-Actor") // Allow override via header
     if actor == "" {
-        actor = "api-user"
+        actor = defaultAPIActor
     }
     remoteAddr := getRemoteAddr(ctx)
 
@@ -133,7 +136,7 @@ func (apiInstance *API) updateKey(ctx *gin.Context) {
     }
     
     if req.Actor == "" {
-        req.Actor = "api-user"
+        req.Actor = defaultAPIActor
     }
     remoteAddr := getRemoteAddr(ctx)
 

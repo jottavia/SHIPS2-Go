@@ -65,8 +65,8 @@ func TestAPICompatibility(t *testing.T) {
 	}
 
 	var rotateResp map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&rotateResp); err != nil {
-		t.Fatalf("Failed to decode rotation response: %v", err)
+	if decodeErr := json.NewDecoder(resp.Body).Decode(&rotateResp); decodeErr != nil {
+		t.Fatalf("Failed to decode rotation response: %v", decodeErr)
 	}
 
 	if rotateResp["status"] != "rotated" {

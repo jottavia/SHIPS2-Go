@@ -32,6 +32,9 @@ type BitLockerKeyInfo struct {
 	Actor     string    `json:"actor"`
 }
 
+// defaultUnknownActor is used when no actor is provided.
+const defaultUnknownActor = "unknown"
+
 // New opens (or creates) the database file at path and ensures the schema exists.
 func New(path string) (*Store, error) {
 	database, err := sql.Open("sqlite", path+"?_busy_timeout=10000&_journal_mode=WAL")
@@ -143,7 +146,7 @@ func (storeInstance *Store) RotatePassword(
 		return errors.New("password cannot be empty")
 	}
 	if actor == "" {
-		actor = "unknown"
+		actor = defaultUnknownActor
 	}
 	machineID, err := storeInstance.getMachineID(ctx, host)
 	if err != nil {
@@ -159,20 +162,26 @@ func (storeInstance *Store) RotatePassword(
 	if _, err = transaction.ExecContext(ctx,
 		`REPLACE INTO passwords(machine_id, password, updated_at, actor) VALUES (?,?,?,?)`,
 		machineID, password, now, actor); err != nil {
-		transaction.Rollback()
+		// Roll back the transaction and return rollback error if any.
+		if rbErr := transaction.Rollback(); rbErr != nil {
+			return rbErr
+		}
 		return err
 	}
 	if _, err = transaction.ExecContext(ctx,
 		`INSERT INTO audit_logs(machine_id, action, actor, remote_addr, timestamp) 
          VALUES (?,?,?,?,?)`,
 		machineID, "rotate_password", actor, remoteAddr, now); err != nil {
-		transaction.Rollback()
+		if rbErr := transaction.Rollback(); rbErr != nil {
+			return rbErr
+		}
 		return err
 	}
 	return transaction.Commit()
 }
 
 // GetPassword returns the latest password info for host and logs the access.
+// nolint:dupl // similar structure to GetBDEKey is intentional
 func (storeInstance *Store) GetPassword(
 	ctx context.Context,
 	host, actor, remoteAddr string,
@@ -200,7 +209,7 @@ func (storeInstance *Store) GetPassword(
 
 	// Log the password retrieval
 	if actor == "" {
-		actor = "unknown"
+		actor = defaultUnknownActor
 	}
 	_, err = storeInstance.db.ExecContext(ctx,
 		`INSERT INTO audit_logs(machine_id, action, actor, remote_addr, timestamp) 
@@ -226,7 +235,7 @@ func (storeInstance *Store) UpdateBDEKey(
 		return errors.New("recovery key cannot be empty")
 	}
 	if actor == "" {
-		actor = "unknown"
+		actor = defaultUnknownActor
 	}
 	machineID, err := storeInstance.getMachineID(ctx, host)
 	if err != nil {
@@ -243,20 +252,25 @@ func (storeInstance *Store) UpdateBDEKey(
 		`REPLACE INTO bitlocker_keys(machine_id, key_text, updated_at, actor) 
          VALUES (?,?,?,?)`,
 		machineID, keyText, now, actor); err != nil {
-		transaction.Rollback()
+		if rbErr := transaction.Rollback(); rbErr != nil {
+			return rbErr
+		}
 		return err
 	}
 	if _, err = transaction.ExecContext(ctx,
 		`INSERT INTO audit_logs(machine_id, action, actor, remote_addr, timestamp) 
          VALUES (?,?,?,?,?)`,
 		machineID, "update_key", actor, remoteAddr, now); err != nil {
-		transaction.Rollback()
+		if rbErr := transaction.Rollback(); rbErr != nil {
+			return rbErr
+		}
 		return err
 	}
 	return transaction.Commit()
 }
 
 // GetBDEKey returns the BitLocker recovery key info for host and logs the access.
+// nolint:dupl // similar structure to GetPassword is intentional
 func (storeInstance *Store) GetBDEKey(
 	ctx context.Context,
 	host, actor, remoteAddr string,
@@ -284,7 +298,7 @@ func (storeInstance *Store) GetBDEKey(
 
 	// Log the key retrieval
 	if actor == "" {
-		actor = "unknown"
+		actor = defaultUnknownActor
 	}
 	_, err = storeInstance.db.ExecContext(ctx,
 		`INSERT INTO audit_logs(machine_id, action, actor, remote_addr, timestamp) 
