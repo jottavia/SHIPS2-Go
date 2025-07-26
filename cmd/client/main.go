@@ -212,7 +212,6 @@ func httpGetJSON(url string, responseStruct interface{}) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		// Read the response body safely; surface any read error.
 		data, readErr := io.ReadAll(resp.Body)
 		if readErr != nil {
 			return fmt.Errorf("server %s: failed to read error body: %w",
