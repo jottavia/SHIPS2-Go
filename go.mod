@@ -3,7 +3,7 @@ module github.com/jottavia/SHIPS2-Go
 go 1.22
 
 require (
-	github.com/gin-gonic/gin v1.10.1
+	github.com/gin-gonic/gin v1.9.1
 	modernc.org/sqlite v1.38.0
 )
 
